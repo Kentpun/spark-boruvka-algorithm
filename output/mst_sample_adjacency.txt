@@ -1,0 +1,8 @@
+# Borůvka minimum spanning forest (undirected edges, u <= v)
+# input: /Users/kentpun/Documents/_04.studies/MSc BDT/MSBD 5003/_05. Project/Implementation/data/sample_adjacency.txt
+total_weight 3
+num_iterations 1
+num_components 1
+# edges: u v weight
+0 1 1
+1 2 2

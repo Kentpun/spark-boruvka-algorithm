@@ -1,0 +1,9 @@
+# Borůvka minimum spanning forest (undirected edges, u <= v)
+# input: sc.parallelize(...)
+total_weight 9
+num_iterations 1
+num_components 1
+# edges: u v weight
+0 1 4
+1 2 2
+2 3 3

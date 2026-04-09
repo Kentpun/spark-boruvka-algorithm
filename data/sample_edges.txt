@@ -1,0 +1,5 @@
+# Undirected edge list: u v weight
+# Classic triangle: MST picks (0,1,1) and (1,2,2); total 3
+0 1 1
+1 2 2
+0 2 3

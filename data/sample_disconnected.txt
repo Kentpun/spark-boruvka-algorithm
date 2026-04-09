@@ -1,0 +1,3 @@
+# Two trees: (0-1) and (2-3); MSF is both edges
+0 1 5
+2 3 7
