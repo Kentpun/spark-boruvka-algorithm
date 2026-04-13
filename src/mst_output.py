@@ -27,6 +27,7 @@ def write_mst_file(
     if source:
         lines.append(f"# input: {source}")
     lines.append(f"total_weight {result.total_weight}")
+    lines.append(f"num_edges {result.num_edges}")
     lines.append(f"num_iterations {result.num_iterations}")
     lines.append(f"num_components {result.num_components}")
     lines.append("# edges: u v weight")

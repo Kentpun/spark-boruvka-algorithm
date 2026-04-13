@@ -85,6 +85,7 @@ def main() -> None:
     for u, v, w in res.mst_edges:
         print(f"  {u} {v} {w}")
     print(f"total_weight={res.total_weight}")
+    print(f"num_edges={res.num_edges}")
     print(f"num_iterations={res.num_iterations}")
     print(f"num_components={res.num_components}")
 
