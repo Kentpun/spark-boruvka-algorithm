@@ -119,6 +119,7 @@ Vertices that **never appear** in any edge file are **not** included (the edge l
     ├── sample_disconnected.txt
     ├── complex_random.txt           # generated stress test (see header comments)
     └── complex_random.meta          # reference total_weight / |MST| / components
+    └── hongk_kong_road_graph.txt
 ```
 
 ---
@@ -232,6 +233,58 @@ spark.stop()
 
 ---
 
+## Running on actual data
+Selected dataset is from https://download.geofabrik.de (OpenStreetMap)
+
+Raw data in the format of `.osm.pbf` (Protocol Buffer Format), a compressed binary format, which contains three types of objects:
+- nodes: individiual points (lat/ lon coordinates), e.g. intersections, landmarks
+- ways: ordered sequences of nodes, e.g. roads, rivers, buildings
+- relations: groups of ways/ nodes, e.g. bus routes, administrative boundaries
+
+To build the road network graph, we need to:
+- nodes => identified by OSM node ID, i.e. the vertices
+- ways (tagged as roads) => edges
+- edge weight => distance calculated from lat/lon
+
+### Preprocessing Pipeline
+Using Hong Kong dataset (small size, 35.1MB) as an example, https://download.geofabrik.de/asia/china.html
+
+```
+wget -P raw_datasets/ https://download.geofabrik.de/asia/china/hong-kong-latest.osm.pbf
+```
+
+**Step 1: Inspect the raw data**
+```
+osmium fileinfo -e raw_datasets/hong-kong-latest.osm.pbf
+```
+You will see:
+```
+- Bounding box: (100.6067931,7.1975938,129.2178728,35.1780177) => span of lat/lon
+- Number of nodes: 3464791
+- Number of ways: 412803
+- Number of relations: 14866
+```
+
+**Step 2: Filtering**
+Since there are many road types, we only need the `highway` tag:
+```
+osmium tags-filter \
+    raw_datasets/hong-kong-latest.osm.pbf \
+    w/highway \
+    -o raw_datasets/hong-kong-roads.osm.pbf
+```
+
+**Step 3:  Extracting edges**
+```
+python src/data_preprocessing.py --input raw_datasets/hong-kong-roads.osm.pbf \
+   --output data/hong_kong_road_graph.txt
+```
+
+Then run the Spark algo:
+```
+python run_mst.py data/hong_kong_road_graph.txt --format edge_list --output output/mst_hong_kong_road_graph.txt
+```
+
 ## Correctness and limitations
 
 - **Correct** for undirected graphs with **distinct** parallel edges allowed; minimum weight is chosen per component each round.
@@ -239,6 +292,33 @@ spark.stop()
 - **Driver memory:** each iteration collects **at most one record per current component** (not the full edge list). Very large **numbers of components** still imply a large collect + union–find — acceptable for typical coursework sizes; for extreme scale, you would replace the driver union–find round with a fully distributed label propagation (more complex).
 - **Directed graphs** are not supported as-is (treat edges as undirected by listing each logical edge once or twice).
 
+### Checking for correctness
+Example: using `data/hong_kong_road_graph.txt`
+
+Ground truth by Kruskal algorithm:
+```
+python scripts/reference_mst.py data/hong_kong_road_graph.txt > output/reference.txt
+```
+
+Naive Diff between two files
+```
+diff <(tail -n +7 output/mst_hong_kong_road_graph.txt) \
+<(python scripts/reference_mst.py data/hong_kong_road_graph.txt | tail -n +5 | sed 's/^  //')
+```
+- Likely yields different results due to the presence of identical edge weigths, giving many possibilities of the MST/ MSF.
+
+To run a more formal test:
+
+Checks:
+  1. Total weight matches Kruskal.
+  2. Edge count equals |V| - num_components (no cycles, no missing edges).
+  3. Component count matches Kruskal.
+  4. Every Boruvka edge exists in the original graph.
+  5. The Boruvka edge set forms a valid forest (no cycles via union-find).
+
+```
+python scripts/test_mst.py --boruvka_output output/mst_hong_kong_road_graph.txt --graph data/hong_kong_road_graph.txt
+```
 ---
 
 ## References
