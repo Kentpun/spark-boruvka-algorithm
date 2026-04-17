@@ -14,24 +14,24 @@ from typing import Iterable, Optional
 
 from pyspark import RDD, SparkContext
 
-from src.graph_loader import parse_adjacency_list_lines, parse_edge_list_lines
+from src.graph_loader import Weight, parse_adjacency_list_lines, parse_edge_list_lines
 from src.union_find import UnionFind
 
 
-def _norm_edge(u: int, v: int, w: int) -> tuple[int, int, int]:
+def _norm_edge(u: int, v: int, w: Weight) -> tuple[int, int, Weight]:
     a, b = (u, v) if u <= v else (v, u)
     return (a, b, w)
 
 
 def _min_edge_choice(
-    a: tuple[int, int, int, int], b: tuple[int, int, int, int]
-) -> tuple[int, int, int, int]:
+    a: tuple[Weight, int, int, int], b: tuple[Weight, int, int, int]
+) -> tuple[Weight, int, int, int]:
     return a if a <= b else b
 
 
 def _parse_edge_partition(
     fmt: str, lines: Iterable[str]
-) -> Iterable[tuple[int, int, int]]:
+) -> Iterable[tuple[int, int, Weight]]:
     parsed = (
         parse_edge_list_lines(lines)
         if fmt == "edge_list"
@@ -43,15 +43,15 @@ def _parse_edge_partition(
 
 @dataclass(frozen=True)
 class BoruvkaResult:
-    mst_edges: list[tuple[int, int, int]]
-    total_weight: int
+    mst_edges: list[tuple[int, int, Weight]]
+    total_weight: Weight
     num_iterations: int
     num_components: int
 
 
 def boruvka_mst(
     sc: SparkContext,
-    edges_rdd: RDD[tuple[int, int, int]],
+    edges_rdd: RDD[tuple[int, int, Weight]],
     max_iterations: Optional[int] = None,
 ) -> BoruvkaResult:
     """
@@ -61,7 +61,7 @@ def boruvka_mst(
     Self-loops are ignored. Parallel edges are allowed.
     """
     edges = (
-        edges_rdd.map(lambda e: _norm_edge(int(e[0]), int(e[1]), int(e[2])))
+        edges_rdd.map(lambda e: _norm_edge(int(e[0]), int(e[1]), e[2]))
         .filter(lambda e: e[0] != e[1])
         .distinct()
         .cache()
@@ -74,7 +74,7 @@ def boruvka_mst(
 
     components: RDD[tuple[int, int]] = vertices.map(lambda v: (v, v)).cache()
 
-    mst_acc: list[tuple[int, int, int]] = []
+    mst_acc: list[tuple[int, int, Weight]] = []
     iters = 0
     num_comp = 0
     cap = max_iterations if max_iterations is not None else n_vertices
@@ -110,15 +110,35 @@ def boruvka_mst(
             if not chosen:
                 break
 
-            merge_pairs: list[tuple[int, int]] = []
-            mst_round: dict[tuple[int, int, int], tuple[int, int, int]] = {}
+            # Build component-level candidate links for this round, then perform a
+            # driver-side cycle scan so we only keep acyclic merges.
+            comp_link_best: dict[tuple[int, int], tuple[Weight, int, int]] = {}
+            for comp_a, (w, u, v, comp_b) in chosen:
+                if comp_a == comp_b:
+                    continue
+                ca, cb = (comp_a, comp_b) if comp_a <= comp_b else (comp_b, comp_a)
+                edge_u, edge_v = (u, v) if u <= v else (v, u)
+                candidate = (w, edge_u, edge_v)
+                prev = comp_link_best.get((ca, cb))
+                if prev is None or candidate < prev:
+                    comp_link_best[(ca, cb)] = candidate
 
-            for _comp_key, (w, u, v, other_comp) in chosen:
-                merge_pairs.append((_comp_key, other_comp))
+            round_uf = UnionFind()
+            merge_pairs: list[tuple[int, int]] = []
+            mst_round: dict[tuple[int, int, Weight], tuple[int, int, Weight]] = {}
+            for (ca, cb), (w, u, v) in sorted(
+                comp_link_best.items(), key=lambda item: (item[1][0], item[1][1], item[1][2])
+            ):
+                if round_uf.find(ca) == round_uf.find(cb):
+                    continue
+                round_uf.union(ca, cb)
+                merge_pairs.append((ca, cb))
                 mst_round[_norm_edge(u, v, w)] = (u, v, w)
 
-            for e in mst_round.values():
-                mst_acc.append(_norm_edge(e[0], e[1], e[2]))
+            if not merge_pairs:
+                break
+
+            mst_acc.extend(mst_round.values())
 
             all_comp_ids = set(components.map(lambda x: x[1]).distinct().collect())
             for a, b in merge_pairs:
@@ -148,9 +168,9 @@ def boruvka_mst(
         components.unpersist()
 
     # Dedupe MST edges (same edge might be added in theory in buggy cases; safe dedupe)
-    seen: set[tuple[int, int, int]] = set()
-    unique_mst: list[tuple[int, int, int]] = []
-    tw = 0
+    seen: set[tuple[int, int, Weight]] = set()
+    unique_mst: list[tuple[int, int, Weight]] = []
+    tw: Weight = 0
     for u, v, w in mst_acc:
         k = _norm_edge(u, v, w)
         if k not in seen:
@@ -168,7 +188,7 @@ def boruvka_mst(
 
 def edges_rdd_from_text_file(
     sc: SparkContext, path: str, fmt: str = "edge_list"
-) -> RDD[tuple[int, int, int]]:
+) -> RDD[tuple[int, int, Weight]]:
     lines = sc.textFile(path)
 
     def part_parse(it):

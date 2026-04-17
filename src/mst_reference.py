@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from src.graph_loader import Weight
 from src.union_find import UnionFind
 
 
 def kruskal_msf(
-    edges: list[tuple[int, int, int]],
-) -> tuple[int, list[tuple[int, int, int]], int]:
+    edges: list[tuple[int, int, Weight]],
+) -> tuple[Weight, list[tuple[int, int, Weight]], int]:
     """
     Undirected multigraph allowed. Edges are (u, v, w); Kruskal picks lightest bridges first.
 
@@ -24,7 +25,7 @@ def kruskal_msf(
     )
 
     uf = UnionFind()
-    picked: list[tuple[int, int, int]] = []
+    picked: list[tuple[int, int, Weight]] = []
     for u, v, w in sorted_e:
         if uf.find(u) != uf.find(v):
             uf.union(u, v)

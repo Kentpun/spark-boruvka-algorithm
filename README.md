@@ -38,7 +38,7 @@ There are at most **\(O(\log V)\)** rounds for \(V\) vertices (each round adds a
 
 ## Input formats (text files)
 
-The graph is **undirected**. Weights are **integers** (typical for coursework; easy to extend to floats).
+The graph is **undirected**. Weights can be **int or float** (including scientific notation like `1e-3`).
 
 ### 1. Edge list (**recommended** for Spark)
 
@@ -51,6 +51,7 @@ u v weight
 - Vertices are **non-negative integers** (any consistent integer ids work).
 - **Comments:** lines starting with `#` are ignored.
 - **Whitespace:** any spaces/tabs between fields.
+- **Weight format:** accepts integers and floats, e.g. `7`, `2.5`, `1e-3`.
 - Each undirected edge should appear **once** (or you may list both \((u,v)\) and \((v,u)\); the implementation **canonicalizes** to `(min(u,v), max(u,v), w)` and **deduplicates**).
 - **Self-loops** (`u == v`) are ignored.
 
@@ -235,7 +236,7 @@ spark.stop()
 ## Correctness and limitations
 
 - **Correct** for undirected graphs with **distinct** parallel edges allowed; minimum weight is chosen per component each round.
-- **Weights** should be orderable; integer ties are broken by \((u, v)\).
+- **Weights** should be orderable; ties are broken by \((u, v)\).
 - **Driver memory:** each iteration collects **at most one record per current component** (not the full edge list). Very large **numbers of components** still imply a large collect + union–find — acceptable for typical coursework sizes; for extreme scale, you would replace the driver union–find round with a fully distributed label propagation (more complex).
 - **Directed graphs** are not supported as-is (treat edges as undirected by listing each logical edge once or twice).
 
