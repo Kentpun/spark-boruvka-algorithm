@@ -46,6 +46,7 @@ class BoruvkaResult:
     mst_edges: list[tuple[int, int, Weight]]
     total_weight: Weight
     num_iterations: int
+    num_edges: int
     num_components: int
 
 
@@ -70,7 +71,7 @@ def boruvka_mst(
     vertices = edges.flatMap(lambda e: (e[0], e[1])).distinct().cache()
     n_vertices = vertices.count()
     if n_vertices == 0:
-        return BoruvkaResult([], 0, 0, 0)
+        return BoruvkaResult([], 0, 0, 0, 0)
 
     components: RDD[tuple[int, int]] = vertices.map(lambda v: (v, v)).cache()
 
@@ -182,6 +183,7 @@ def boruvka_mst(
         mst_edges=sorted(unique_mst),
         total_weight=tw,
         num_iterations=iters,
+        num_edges=len(unique_mst),
         num_components=num_comp,
     )
 
