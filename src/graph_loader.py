@@ -10,11 +10,19 @@ from __future__ import annotations
 
 from typing import Iterator, Tuple
 
-Edge = Tuple[int, int, int]
+Weight = int | float
+Edge = Tuple[int, int, Weight]
 
 
 def _parse_ints(parts: list[str]) -> list[int]:
     return [int(x) for x in parts]
+
+
+def _parse_weight(token: str) -> Weight:
+    # Keep integers as int for cleaner output; allow decimal/scientific tokens as float.
+    if any(ch in token for ch in (".", "e", "E")):
+        return float(token)
+    return int(token)
 
 
 def parse_edge_list_lines(lines: Iterator[str]) -> list[Edge]:
@@ -26,14 +34,15 @@ def parse_edge_list_lines(lines: Iterator[str]) -> list[Edge]:
         parts = line.split()
         if len(parts) < 3:
             raise ValueError(f"Edge list line needs u v weight, got: {raw!r}")
-        u, v, w = _parse_ints(parts[:3])
+        u, v = _parse_ints(parts[:2])
+        w = _parse_weight(parts[2])
         edges.append((u, v, w))
     return edges
 
 
 def parse_adjacency_list_lines(lines: Iterator[str]) -> list[Edge]:
     edges: list[Edge] = []
-    seen: set[tuple[int, int, int]] = set()
+    seen: set[tuple[int, int, Weight]] = set()
 
     for raw in lines:
         line = raw.strip()
@@ -56,7 +65,7 @@ def parse_adjacency_list_lines(lines: Iterator[str]) -> list[Edge]:
             )
         for i in range(0, len(rest), 2):
             v = int(rest[i])
-            w = int(rest[i + 1])
+            w = _parse_weight(rest[i + 1])
             a, b = (u, v) if u <= v else (v, u)
             key = (a, b, w)
             if key in seen:

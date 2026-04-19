@@ -1,0 +1,8 @@
+# Borůvka minimum spanning forest (undirected edges, u <= v)
+# input: data/sample_float_edges.txt
+total_weight 3.5
+num_iterations 1
+num_components 1
+# edges: u v weight
+0 1 1.5
+1 2 2
