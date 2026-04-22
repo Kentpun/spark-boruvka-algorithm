@@ -159,13 +159,25 @@ def boruvka_mst(
                 lambda x, m=comp_map: (x[0], m.get(x[1], x[1]))
             ).cache()
             components.count()
+            #if broadcast:
+            #bc_comp_map = sc.broadcast(comp_map)
+            #components.unpersist()
+            #components = comp_by_v.map(
+             #   lambda x: (x[0], bc_comp_map.value.get(x[1], x[1]))
+            #).cache()
+            #components.count()   
 
             # Optimization: Progressive edge pruning
             vertex_comp = dict(components.collect())
+            #vertex_comp_dict = components.collectAsMap()
+            #bc_vertex_comp = sc.broadcast(vertex_comp_dict)
             prev_edges = edges
             edges = prev_edges.filter(
                 lambda e, vc=vertex_comp: vc.get(e[0]) != vc.get(e[1])
             ).cache()
+            #edges = prev_edges.filter(
+            #    lambda e: bc_vertex_comp.value.get(e[0]) != bc_vertex_comp.value.get(e[1])
+            #).cache()
             edges.count()
             prev_edges.unpersist()
 
