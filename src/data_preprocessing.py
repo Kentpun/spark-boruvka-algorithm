@@ -9,7 +9,7 @@ def haversine(lat1, lon1, lat2, lon2):
     dlambda = math.radians(lon2 - lon1)
 
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    d = int(2 * R * math.asin(math.sqrt(a)))
+    d = round(2 * R * math.asin(math.sqrt(a)), 2)
     return d
 
 class RoadGraphHandler(osmium.SimpleHandler):
@@ -42,16 +42,18 @@ class RoadGraphHandler(osmium.SimpleHandler):
             self.edges.add((a, b, w))
 
     def remap(self):
-        # Map the original OSM node ids to a compact ones
+        # Map the original OSM node ids to compact sequential ones
         all_nodes = sorted({u for u, _, _ in self.edges} | {v for _, v, _ in self.edges})
         id_map = {old: new for new, old in enumerate(all_nodes)}
 
         self.edges = {(id_map[u], id_map[v], w) for u, v, w in self.edges}
-            
+
+        self.coords = {id_map[old]: latlon for old, latlon in self.coords.items() if old in id_map}
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Preprocess OSM data to build road network graph.")
     parser.add_argument("--input", type=str, required=True, help="Input OSM PBF file.")
     parser.add_argument("--output", type=str, required=True, help="Output file for edge list.")
+    parser.add_argument("--coords", type=str, default=None, help="Output file for node coordinates (CSV).")
 
     args = parser.parse_args()
 
@@ -64,3 +66,10 @@ if __name__ == "__main__":
             f.write(f"{u} {v} {w}\n")
 
     print(f"Extracted {len(handler.edges)} edges from OSM data to {args.output}")
+
+    coords_path = args.coords or args.output.replace(".txt", "_coords.csv")
+    with open(coords_path, "w") as f:
+        f.write("node_id,lat,lon\n")
+        for node_id, (lat, lon) in sorted(handler.coords.items()):
+            f.write(f"{node_id},{lat},{lon}\n")
+    print(f"Saved {len(handler.coords)} node coordinates to {coords_path}")

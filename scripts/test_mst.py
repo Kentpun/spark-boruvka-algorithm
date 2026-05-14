@@ -1,10 +1,12 @@
+#!/usr/bin/env python3
 """
 Correctness test: compare Boruvka output file against Kruskal ground truth.
 """
-
 import argparse
 import sys
 from pathlib import Path
+
+WEIGHT_DECIMALS = 4  # decimal places used when comparing float edge weights
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -15,21 +17,21 @@ from src.mst_reference import kruskal_msf
 from src.union_find import UnionFind
 
 
-def _parse_boruvka_output(path: Path) -> tuple[int, int, int, list[tuple[int, int, int]]]:
+def _parse_boruvka_output(path: Path) -> tuple[float, int, int, list[tuple[int, int, float]]]:
     """
     Parse a Borůvka output file produced by mst_output.write_mst_file.
 
     Returns (total_weight, num_iterations, num_components, edges).
     """
     total_weight = num_iterations = num_components = None
-    edges: list[tuple[int, int, int]] = []
+    edges: list[tuple[int, int, float]] = []
 
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         if line.startswith("total_weight"):
-            total_weight = int(line.split()[1])
+            total_weight = float(line.split()[1])
         elif line.startswith("num_iterations"):
             num_iterations = int(line.split()[1])
         elif line.startswith("num_components"):
@@ -39,7 +41,7 @@ def _parse_boruvka_output(path: Path) -> tuple[int, int, int, list[tuple[int, in
         else:
             parts = line.split()
             if len(parts) >= 3:
-                u, v, w = int(parts[0]), int(parts[1]), int(parts[2])
+                u, v, w = int(parts[0]), int(parts[1]), float(parts[2])
                 edges.append((u, v, w))
 
     missing = [
@@ -68,13 +70,13 @@ def _check_no_cycles(edges: list[tuple[int, int, int]]) -> list[str]:
 
 
 def _check_edges_in_graph(
-    boruvka_edges: list[tuple[int, int, int]],
-    graph_edge_set: set[tuple[int, int, int]],
+    boruvka_edges: list[tuple[int, int, float]],
+    graph_edge_set: set[tuple[int, int, float]],
 ) -> list[str]:
     """Return errors for any Borůvka edge not present in the original graph."""
     errors = []
     for u, v, w in boruvka_edges:
-        key = (min(u, v), max(u, v), w)
+        key = (min(u, v), max(u, v), round(w, WEIGHT_DECIMALS))
         if key not in graph_edge_set:
             errors.append(f"  edge ({u}, {v}, {w}) not found in input graph")
     return errors
@@ -92,7 +94,7 @@ def run_tests(boruvka_path: Path, graph_path: Path) -> bool:
     graph_edges = load_graph_from_text(
         graph_path.read_text(encoding="utf-8"), fmt="edge_list"
     )
-    graph_edge_set = {(min(u, v), max(u, v), w) for u, v, w in graph_edges}
+    graph_edge_set = {(min(u, v), max(u, v), round(w, WEIGHT_DECIMALS)) for u, v, w in graph_edges}
 
     # Kruskal ground truth
     ref_total, ref_mst, ref_ncomp = kruskal_msf(graph_edges)
@@ -126,11 +128,12 @@ def run_tests(boruvka_path: Path, graph_path: Path) -> bool:
         if not ok:
             passed = False
 
-    # 1. Total weight
+    # 1. Total weight (rounded to WEIGHT_DECIMALS to tolerate float imprecision)
+    weight_tol = 10 ** -WEIGHT_DECIMALS
     check(
         "Total weight matches Kruskal",
-        boruvka_total == ref_total,
-        f"boruvka={boruvka_total}, kruskal={ref_total}, diff={boruvka_total - ref_total:+d}",
+        abs(boruvka_total - ref_total) <= weight_tol,
+        f"boruvka={boruvka_total:.{WEIGHT_DECIMALS}f}, kruskal={ref_total:.{WEIGHT_DECIMALS}f}, diff={boruvka_total - ref_total:+.{WEIGHT_DECIMALS}f}",
     )
 
     # 2. Edge count (detects both cycles and missing edges)
